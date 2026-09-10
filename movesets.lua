@@ -1,4 +1,4 @@
-local gExtraStates = {}
+gExtraStates = {}
 for i = 0, MAX_PLAYERS - 1 do
     gExtraStates[i] = {}
     local e = gExtraStates[i]
@@ -186,11 +186,7 @@ end
 local function coin_add()
     local m = gMarioStates[0]
     local e = gExtraStates[0]
-    if greedyMode then
-        return 25
-    else
-        return e.wallet/4
-    end
+    return (gGlobalSyncTable.greedyMode and 50 or e.wallet)*0.5
 end
 
 local function do_better_throw(m, o)
@@ -1066,6 +1062,14 @@ local jumpTable = {
 
 local function wario_update(m)
     local e = gExtraStates[m.playerIndex]
+    if m.playerIndex == 0 then
+        if e.wallet > 50 and get_global_timer()%30 == 0 then
+            e.wallet = e.wallet - 1
+            spawn_sync_object(id_bhvCoinDrop, E_MODEL_YELLOW_COIN, m.pos.x, m.pos.y + 160, m.pos.z, function(oCoin)
+                oCoin.globalPlayerIndex = network_global_index_from_local(0)
+            end)
+        end
+    end
 
     -- torso tilt
     if m.action == ACT_WALKING then
@@ -1194,6 +1198,10 @@ end
 
 function wario_interact(m, o, intee)
     local e = gExtraStates[m.playerIndex]
+    if intee == INTERACT_COIN then
+        e.wallet = e.wallet + o.oDamageOrCoinValue
+        return true
+    end
     local damagableTypes = (INTERACT_BOUNCE_TOP | INTERACT_BOUNCE_TOP2 | INTERACT_HIT_FROM_BELOW | 2097152 | INTERACT_KOOPA | INTERACT_BREAKABLE | INTERACT_GRABBABLE | INTERACT_BULLY)
 
     if (m.action == ACT_WAR_SH_BASH) and (intee & damagableTypes) ~= 0 then
@@ -1239,7 +1247,7 @@ function wario_level_init()
 
     if e.prevLives > m.numLives then
         e.prevLives = m.numLives
-        e.wallet = 0
+        --e.wallet = 0
     end
 end
 
@@ -1451,7 +1459,7 @@ local function syrup_set_action(m)
         set_mario_action(m, ACT_SYP_SLASH, 0)
         e.slashCooldown = slashCooldownBase - coin_add()
     end
-    if e.wallet >= 100 or greedyMode then
+    if e.wallet >= 50 or gGlobalSyncTable.greedyMode then
         chopMax = 2
     else 
         chopMax = 1
@@ -1511,14 +1519,14 @@ end
 ---------
 local function do_coin_hud(m, e)
     local colour = 0
-    local add = string.format("+%.0f", (e.wallet/4))
+    local add = string.format("+%.0f", (e.wallet))
 
     if e.wallet > prevNumCoins then
         prevNumCoins = prevNumCoins + 1
         e.bagScale = 0.4
     end
 
-    if e.wallet >= 100 or greedyMode then
+    if e.wallet >= 50 or gGlobalSyncTable.greedyMode then
         add = "MAX"
         colour = math.abs(math.sin(get_global_timer()*0.5))*255
     end
@@ -1597,15 +1605,6 @@ local function syrup_hud()
     djui_hud_render_texture(TEX_SWORD_BACK, 20, 61, 1, 1)
     djui_hud_render_texture(TEX_SWORD_FRONT, 24, 61, e.swordScale, 1)
 end
-
-local function bank_add_coin(id)
-    local m = gMarioStates[0]
-    local e = gExtraStates[0]
-    if id == SOUND_GENERAL_COIN or id == SOUND_GENERAL_COIN_WATER then
-        e.wallet = e.wallet + 1
-    end
-end
-hook_event(HOOK_ON_PLAY_SOUND, bank_add_coin)
 
 function set_prev_lives(m)
     local e = gExtraStates[m.playerIndex]

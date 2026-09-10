@@ -3,7 +3,7 @@
 
 local TEXT_MOD_NAME = "Wario Bros."
 local boot = true
-greedyMode = mod_storage_load_bool("greedyMode")
+gGlobalSyncTable.greedyMode = mod_storage_load_bool("greedyMode")
 
 -- Stops mod from loading if Character Select isn't on
 if not _G.charSelectExists then
@@ -772,14 +772,14 @@ local function command_greedy_mode(msg)
 		djui_chat_message_create("\\#ffaaaa\\Only the host may use this command")
 		return true
 	else
-	    if greedyMode then
+	    if gGlobalSyncTable.greedyMode then
 			djui_chat_message_create("Greedy Mode: \\#ff0000\\OFF")
-			greedyMode = false
+			gGlobalSyncTable.greedyMode = false
 		else
 			djui_chat_message_create("Greedy Mode: \\#00ff00\\ON")
-			greedyMode = true
+			gGlobalSyncTable.greedyMode = true
 		end
-		mod_storage_save_bool("greedyMode", greedyMode)
+		mod_storage_save_bool("greedyMode", gGlobalSyncTable.greedyMode)
 		return true
 	end
 	return false
