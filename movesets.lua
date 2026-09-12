@@ -1543,7 +1543,7 @@ local function do_coin_hud(m)
 
     djui_hud_set_font(FONT_RECOLOR_HUD)
 
-    local x, y = hudDodge.find_open_hud_space(0, 0, 40, 32, 1, 0, e.wallet == 100 and 4 or 3)
+    local x, y = hudDodge.find_open_hud_space(0, 0, 40, 16, 1, 0, e.wallet == 100 and 3 or 2)
     x = x + 4
 
     djui_hud_set_color(255, 255, 255, 255)
