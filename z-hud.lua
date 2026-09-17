@@ -346,7 +346,7 @@ end)
 
 local function update_int_rate()
     if not network_is_server() then return end
-    if get_global_timer() % (30*60*10) == 0 then
+    if get_global_timer() % (30*60*5) == 0 then
         gGlobalSyncTable.interestRate = math.random(1, 4)
     end
 end
