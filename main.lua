@@ -3,6 +3,12 @@
 
 local TEXT_MOD_NAME = "Wario Bros."
 local boot = mod_storage_load_bool("bootmessage", true)
+local BITRATE = 22050
+local MUSIC_START   = BITRATE * 7.233
+local MUSIC_END     = BITRATE * 45.628
+local MUSIC_GOLD_CAP = audio_stream_load("JW_MUSIC_GOLD_CAP.ogg")
+audio_stream_set_loop_points(MUSIC_GOLD_CAP, MUSIC_START, MUSIC_END)
+audio_stream_set_looping(MUSIC_GOLD_CAP, true)
 
 -- Stops mod from loading if Character Select isn't on
 if not _G.charSelectExists then
@@ -13,9 +19,7 @@ end
 -- Models --
 local E_MODEL_J_WARIO = smlua_model_util_get_id('jers_wario_geo')
 local E_MODEL_J_WARIO_T = smlua_model_util_get_id('jers_wario_t_geo')
-
 local E_MODEL_J_WALUIGI = smlua_model_util_get_id('jers_waluigi_geo')
-
 local E_MODEL_J_SYRUP = smlua_model_util_get_id('jers_captain_syrup_geo')
 
 -- Textures --
@@ -733,3 +737,7 @@ end
 hook_event(HOOK_ON_MODS_LOADED, on_character_select_load)
 hook_event(HOOK_CHARACTER_SOUND, on_character_sound)
 hook_event(HOOK_MARIO_UPDATE, on_character_snore)
+
+charSelect.character_add_sequence_replacement(CT_J_WARIO, SEQ_EVENT_METAL_CAP, MUSIC_GOLD_CAP)
+charSelect.character_add_sequence_replacement(CT_J_WALUIGI, SEQ_EVENT_METAL_CAP, MUSIC_GOLD_CAP)
+charSelect.character_add_sequence_replacement(CT_J_SYRUP, SEQ_EVENT_METAL_CAP, MUSIC_GOLD_CAP)

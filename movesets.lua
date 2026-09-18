@@ -67,7 +67,7 @@ bashSpeedBase = 50
 slashCooldownMax = 300
 maxBombs = 10
 bombHudTimerMax = 150
-powerScaling = charSelect.add_option("Power Scaling", 1, 1, nil, {"Coins increase speed."}, true)
+powerScaling = charSelect.add_option("Power Scaling", 1, 1, nil, {"Coins increase speed for", "Wario Bros characters."}, true)
 
 ARG_WARIO     = 0
 ARG_WALUIGI   = 1
@@ -619,8 +619,8 @@ local function act_humble_gp(m)
 
     m.forwardVel = m.forwardVel*0.95
 
-    if m.input & INPUT_B_PRESSED ~= 0 and m.actionTimer > 0 then
-        if m.actionArg ~= ARG_SYRUP and m.actionArg ~= ARG_WARIO then
+    if m.input & INPUT_B_PRESSED ~= 0 and m.actionTimer > 0 and m.actionArg ~= ARG_WARIO then
+        if m.actionArg ~= ARG_SYRUP then
             set_mario_action(m, ACT_HUMBLE_GP_CANCEL, m.actionArg)
         elseif e.chop > 0 then
             m.faceAngle.y = m.intendedYaw
@@ -953,7 +953,7 @@ local function act_syp_chop(m)
     m.actionTimer = m.actionTimer + 1
     return 0
 end
-hook_mario_action(ACT_SYP_CHOP, act_syp_chop)
+hook_mario_action(ACT_SYP_CHOP, act_syp_chop, INT_KICK)
 
 local function act_syp_cannon(m)
     local e = gWarioStates[m.playerIndex]
