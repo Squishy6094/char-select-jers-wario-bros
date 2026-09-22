@@ -1353,7 +1353,7 @@ local function waluigi_update(m)
             if obj_has_behavior_id(m.heldObj, id_bhvBobomb) ~= 0 and e.bombsStashed < maxBombs then
                 return set_mario_action(m, ACT_BOMB_STASH, 0)
             end
-        elseif m.action == ACT_IDLE then
+        elseif m.action == ACT_IDLE or m.action == ACT_PANTING then
             if e.bombsStashed > 0 then
                 return set_mario_action(m, ACT_BOMB_STASH, 1)
             end
