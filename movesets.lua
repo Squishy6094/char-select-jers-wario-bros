@@ -236,7 +236,7 @@ local function act_war_sh_bash(m)
 
     m.marioBodyState.eyeState = m.actionArg == 0 and MARIO_EYES_LOOK_RIGHT or MARIO_EYES_LOOK_UP
     m.marioBodyState.punchState = m.actionArg == 0 and 67 or 0
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, turnRate, turnRate)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, turnRate)
     apply_slope_accel(m)
 
     if should_begin_sliding(m) ~= 0 then
@@ -388,7 +388,7 @@ local function act_war_roll(m)
     e.prevPosY = m.pos.y
 
     m.particleFlags = m.particleFlags | PARTICLE_DUST
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x200)
     apply_slope_accel(m)
 
     if (m.marioObj.header.gfx.animInfo.animFrame % 30) == 0 then
@@ -485,7 +485,7 @@ local function act_wal_sh_bash(m)
     m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
     m.particleFlags = m.particleFlags | PARTICLE_DUST
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x400, 0x400)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x400)
     apply_slope_accel(m)
 
     if (m.actionTimer & 2 == 0) then
@@ -548,7 +548,7 @@ local function act_wal_sh_bash_jump(m)
     m.particleFlags = m.particleFlags | PARTICLE_DUST
     e.canBash = false
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x400, 0x400)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x400)
 
     if (m.actionTimer & 2 == 0) then
         audio_sample_play(SOUND_JWAL_SH_BASH, m.pos, pause_check())
