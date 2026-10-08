@@ -2,6 +2,7 @@ if not _G.charSelectExists then return end
 
 ACT_WAR_SH_BASH = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 ACT_WAR_SH_BASH_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ATTACKING | ACT_FLAG_CONTROL_JUMP_HEIGHT | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
+ACT_BASH_REBOUND = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_WAR_ROLL = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING | ACT_FLAG_SHORT_HITBOX)
 ACT_WAR_CARRY = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING)
 ACT_WAL_SH_BASH = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
@@ -41,7 +42,7 @@ for i = 0, MAX_PLAYERS - 1 do
         prevBankY = djui_hud_get_screen_height() + 16,
         prevTradeX = -70,
         traderTimer = 0,
-        interestRate = 1,
+        --interestRate = 1,
         bagX = 75,
         bagY = 15,
     }
@@ -57,7 +58,7 @@ local SOUND_JSYP_SLASH = audio_sample_load("JW_SOUND_SLASH.ogg")
 local SOUND_JSYP_CHOP = audio_sample_load("JW_SOUND_CHOP.ogg")
 local SOUND_TADA = audio_sample_load("JW_SOUND_TADA.ogg")
 
-local WAR_SH_BASH_MIN = 18
+local shoulderBashMin = 20
 local WAL_SH_BASH_MAX = 20
 local chopMax = 1
 local availCoinsMax = 25
@@ -66,7 +67,7 @@ bashSpeedBase = 50
 slashCooldownMax = 300
 maxBombs = 10
 bombHudTimerMax = 150
-powerScaling = charSelect.add_option("Power Scaling", 1, 1, nil, {"Coins increase speed."}, true)
+powerScaling = charSelect.add_option("Power Scaling", 1, 1, nil, {"Coins increase speed for", "Wario Bros characters."}, true)
 
 ARG_WARIO     = 0
 ARG_WALUIGI   = 1
@@ -137,7 +138,7 @@ local function dash_attacks(m, o, intee)
             o.oPosX, o.oPosY, o.oPosZ,
             nil)
     end
-    
+
     if (intee & INTERACT_BULLY) ~= 0 then
         o.oVelY = 30
         o.oForwardVel = 50
@@ -224,11 +225,18 @@ end
 -- CUSTOM ACTIONS --
 
 local function act_war_sh_bash(m)
-    m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
-    m.marioBodyState.punchState = 67
-    m.particleFlags = m.particleFlags | PARTICLE_DUST
+    local turnRate = m.actionArg == 0 and 0x100 or 0x400
+    local accel = m.actionArg == 0 and 6 or 9
+    local runDeccel = m.actionArg == 4 and 0.5 or 1
+    local lerpSpeed = (mario_floor_is_steep(m) ~= 0 and 0.05 or 0.2) * runDeccel
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x400, 0x400)
+    if charSelect.is_menu_open() and m.playerIndex == 0 then
+        return set_mario_action(m, ACT_IDLE, 0)
+    end
+
+    m.marioBodyState.eyeState = m.actionArg == 0 and MARIO_EYES_LOOK_RIGHT or MARIO_EYES_LOOK_UP
+    m.marioBodyState.punchState = m.actionArg == 0 and 67 or 0
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, turnRate)
     apply_slope_accel(m)
 
     if should_begin_sliding(m) ~= 0 then
@@ -238,6 +246,9 @@ local function act_war_sh_bash(m)
     if (m.actionTimer & 2 == 0) then
         audio_sample_play(SOUND_JWAR_SH_BASH, m.pos, pause_check())
     end
+    if (m.actionTimer % 4 == 0) then
+        set_mario_particle_flags(m, PARTICLE_DUST, 0)
+    end
 
     if m.actionTimer < 2 then
         m.vel.y = 0
@@ -245,48 +256,56 @@ local function act_war_sh_bash(m)
 
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_HIT_WALL and m.wall ~= nil then
-        if m.wall.object == nil or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
-            return humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WARIO)
+        if m.actionArg == 0 then
+            if m.wall.object == nil
+            or m.wall.object.oInteractType & (INTERACT_BREAKABLE) ~= 0
+            or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
+                return humble_bump(m, -40, 30, ACT_BASH_REBOUND, ARG_WARIO)
+            end
+        elseif m.actionArg == 4 then
+            if m.wall.object == nil or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
+                m.vel.y = 15
+                set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+                return set_mario_action(m, ACT_BACKWARD_AIR_KB, 0)
+            end
         end
+        
     elseif stepResult == GROUND_STEP_LEFT_GROUND then
-        set_mario_action(m, ACT_WAR_SH_BASH_JUMP, 0)
+        set_mario_action(m, ACT_WAR_SH_BASH_JUMP, m.actionArg)
     end
 
-    set_mario_anim_with_accel(m, MARIO_ANIM_RUNNING_UNUSED, m.forwardVel / 6 * 0x10000)
-    smlua_anim_util_set_animation(m.marioObj, "JWAR_SH_BASH")
+    set_mario_anim_with_accel(m, MARIO_ANIM_RUNNING_UNUSED, m.forwardVel / accel * 0x10000)
+    smlua_anim_util_set_animation(m.marioObj, (m.actionArg == 0 and "JWAR_SH_BASH" or "JWAR_HEAD_BASH"))
 
     -- speed
     local speedCap = bashSpeedBase + coin_add()
-    local speed = m.forwardVel
+    m.forwardVel = math.lerp(m.forwardVel, speedCap, lerpSpeed)
 
-    if m.actionTimer < 3 and m.forwardVel < 30 then
-        speed = 30
-    else
-        speed = approach_f32(speed, speedCap, 0.6, 5)
-    end
-    mario_set_forward_vel(m, speed)
-
-    if m.forwardVel < 10 then
+    if (m.forwardVel < 30 and m.actionTimer > 20) or m.forwardVel < 10 then
         set_mario_action(m, ACT_WALKING, 0)
-        if mario_floor_is_steep(m) then
+        if mario_floor_is_steep(m) ~= 0 then
             set_mario_action(m, ACT_STOMACH_SLIDE, 0)
         end
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 then
-        if m.prevAction ~= ACT_WAR_SH_BASH_JUMP or (m.prevAction == ACT_WAR_SH_BASH_JUMP and m.actionTimer > 5) then
+        if m.actionTimer > 2 then
             audio_sample_play(SOUND_JWAR_LEAP, m.pos, pause_check())
             m.vel.y = 50
-            set_mario_action(m, ACT_WAR_SH_BASH_JUMP, 0)
+            set_mario_action(m, ACT_WAR_SH_BASH_JUMP, m.actionArg)
         end
     elseif m.input & INPUT_Z_PRESSED ~= 0 then
-        set_mario_action(m, ACT_CROUCH_SLIDE, 0)
-    elseif (m.controller.buttonDown & B_BUTTON == 0) or ((is_game_paused() or _G.charSelect.is_menu_open()) and m.playerIndex == 0) then
-        if m.prevAction == ACT_WAR_SH_BASH_JUMP then
-            set_mario_action(m, ACT_BRAKING, 0)
-        elseif m.actionTimer > WAR_SH_BASH_MIN then
-            set_mario_action(m, ACT_BRAKING, 0)
+        if coin_add()*4 >= 50 and m.controller.buttonDown & B_BUTTON ~= 0 then
+            m.actionArg = 4
+            play_character_sound(m, CHAR_SOUND_GROUND_POUND_WAH)
+            set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        else
+            set_mario_action(m, ACT_CROUCH_SLIDE, 0)
         end
+    elseif (m.actionArg == 0 and m.actionTimer > shoulderBashMin)
+        or (m.actionArg == 4 and m.input & INPUT_Z_DOWN == 0) then
+        m.forwardVel = m.forwardVel + (m.actionArg * 4)
+        set_mario_action(m, ACT_BRAKING, 0)
     end
 
     m.actionTimer = m.actionTimer + 1
@@ -295,36 +314,71 @@ end
 hook_mario_action(ACT_WAR_SH_BASH, act_war_sh_bash)
 
 local function act_war_sh_bash_jump(m)
-    m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
+    local exitArg = m.actionArg == ARG_WALUIGI and ARG_WALUIGI or ARG_WARIO
+    local exitAct = m.actionArg == 4 and ACT_WAR_SH_BASH or ACT_FREEFALL_LAND
 
     if m.actionArg == ARG_WALUIGI then
         smlua_anim_util_set_animation(m.marioObj, "JWAL_SH_BASH_JUMP")
-    else
+        m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
+    elseif m.actionArg == 4 then
+        smlua_anim_util_set_animation(m.marioObj, "JWAR_HEAD_BASH_JUMP")
+        m.marioBodyState.eyeState = MARIO_EYES_LOOK_UP
+        set_mario_anim_with_accel(m, MARIO_ANIM_RUNNING_UNUSED, 0x20000)
+        if m.actionState == 0 then
+            set_anim_to_frame(m, 0)
+            m.actionState = 1
+        end
+    elseif m.actionArg == ARG_WARIO then
         smlua_anim_util_set_animation(m.marioObj, "JWAR_SH_BASH_JUMP")
+        m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
         m.marioBodyState.punchState = 67
     end
 
-    --m.peakHeight = m.pos.y
-
-    local stepResult = common_air_action_step(m, ACT_WAR_SH_BASH, MARIO_ANIM_RUNNING_UNUSED, AIR_STEP_NONE)
+    local stepResult = common_air_action_step(m, exitAct, MARIO_ANIM_RUNNING_UNUSED, AIR_STEP_NONE)
     if stepResult == AIR_STEP_HIT_WALL and m.wall ~= nil then
-        if m.wall.object == nil or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
-            return humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WARIO)
+        if m.wall.object == nil or (m.wall.object.oInteractType & INTERACT_BREAKABLE) == 0 then
+            return humble_bump(m, -40, 30, ACT_BASH_REBOUND, ARG_WARIO)
         end
     elseif stepResult == AIR_STEP_LANDED then
-        if (m.forwardVel < 30 or m.controller.buttonDown & B_BUTTON == 0) then
-            set_mario_action(m, ACT_FREEFALL_LAND, 0)
+        if exitAct == ACT_WAR_SH_BASH then
+            m.actionArg = 4
         end
     end
 
     if m.input & INPUT_Z_PRESSED ~= 0 then
-        set_mario_action(m, ACT_HUMBLE_GP, ARG_WARIO)
+        set_mario_action(m, ACT_HUMBLE_GP, exitArg)
     end
 
     m.actionTimer = m.actionTimer + 1
     return 0
 end
 hook_mario_action(ACT_WAR_SH_BASH_JUMP, act_war_sh_bash_jump)
+
+local function act_bash_rebound(m)
+    local exitArg = m.actionArg == ARG_WALUIGI and ARG_WALUIGI or ARG_WARIO
+
+    if m.actionArg == ARG_WALUIGI then
+        smlua_anim_util_set_animation(m.marioObj, "JWAL_SH_BASH_JUMP")
+        m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
+    elseif m.actionArg == ARG_WARIO then
+        smlua_anim_util_set_animation(m.marioObj, "JWAR_SH_BASH_JUMP")
+        m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
+        m.marioBodyState.punchState = 67
+    end
+
+    local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, MARIO_ANIM_RUNNING_UNUSED, AIR_STEP_NONE)
+    if stepResult == AIR_STEP_LANDED then
+        m.forwardVel = 0
+    end
+
+    if m.input & INPUT_Z_PRESSED ~= 0 then
+        set_mario_action(m, ACT_HUMBLE_GP, exitArg)
+    end
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_BASH_REBOUND, act_bash_rebound)
 
 local function act_war_roll(m)
     local e = gWarioStates[m.playerIndex]
@@ -334,7 +388,7 @@ local function act_war_roll(m)
     e.prevPosY = m.pos.y
 
     m.particleFlags = m.particleFlags | PARTICLE_DUST
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x200)
     apply_slope_accel(m)
 
     if (m.marioObj.header.gfx.animInfo.animFrame % 30) == 0 then
@@ -345,16 +399,16 @@ local function act_war_roll(m)
     if stepResult == GROUND_STEP_HIT_WALL and m.wall ~= nil then
         if m.wall.object == nil or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
             m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
-            m.forwardVel = -15
-            return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
+            m.vel.y = 15
+            return set_mario_action(m, ACT_BACKWARD_AIR_KB, 0)
         end
     elseif stepResult == GROUND_STEP_LEFT_GROUND then
         set_mario_action(m, ACT_FREEFALL, 0)
     end
-        
+   
     set_mario_anim_with_accel(m, MARIO_ANIM_FORWARD_SPINNING, (m.forwardVel / 50) * 0x10000)
 
-    speed = speed - 0.3 + (e.prevPosY - m.pos.y)/15
+    speed = speed - 0.2 + (e.prevPosY - m.pos.y)/15
     if speed < 31 then
         if m.input & INPUT_NONZERO_ANALOG ~= 0 then
             set_mario_action(m, ACT_WALKING, 0)
@@ -431,7 +485,7 @@ local function act_wal_sh_bash(m)
     m.marioBodyState.eyeState = MARIO_EYES_LOOK_RIGHT
     m.particleFlags = m.particleFlags | PARTICLE_DUST
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x400, 0x400)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x400)
     apply_slope_accel(m)
 
     if (m.actionTimer & 2 == 0) then
@@ -443,7 +497,7 @@ local function act_wal_sh_bash(m)
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_HIT_WALL and m.wall ~= nil then
         if m.wall.object == nil or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
-            return humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WALUIGI)
+            return humble_bump(m, -40, 30, ACT_BASH_REBOUND, ARG_WALUIGI)
         end
     elseif stepResult == GROUND_STEP_LEFT_GROUND then
         m.action = ACT_WAL_SH_BASH_JUMP
@@ -494,7 +548,7 @@ local function act_wal_sh_bash_jump(m)
     m.particleFlags = m.particleFlags | PARTICLE_DUST
     e.canBash = false
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x400, 0x400)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x400)
 
     if (m.actionTimer & 2 == 0) then
         audio_sample_play(SOUND_JWAL_SH_BASH, m.pos, pause_check())
@@ -505,7 +559,7 @@ local function act_wal_sh_bash_jump(m)
     local stepResult = common_air_action_step(m, ACT_WAR_SH_BASH, MARIO_ANIM_RUNNING_UNUSED, AIR_STEP_NONE)
     if stepResult == AIR_STEP_HIT_WALL and m.wall ~= nil then
         if m.wall.object == nil or m.wall.object.oInteractType & (INTERACT_BREAKABLE) == 0 then
-            return humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WALUIGI)
+            return humble_bump(m, -40, 30, ACT_BASH_REBOUND, ARG_WALUIGI)
         end
     elseif stepResult == AIR_STEP_LANDED then
         set_mario_action(m, ACT_FREEFALL_LAND, 0)
@@ -565,7 +619,7 @@ local function act_humble_gp(m)
 
     m.forwardVel = m.forwardVel*0.95
 
-    if m.input & INPUT_B_PRESSED ~= 0 and m.actionTimer > 0 then
+    if m.input & INPUT_B_PRESSED ~= 0 and m.actionTimer > 0 and m.actionArg ~= ARG_WARIO then
         if m.actionArg ~= ARG_SYRUP then
             set_mario_action(m, ACT_HUMBLE_GP_CANCEL, m.actionArg)
         elseif e.chop > 0 then
@@ -899,7 +953,7 @@ local function act_syp_chop(m)
     m.actionTimer = m.actionTimer + 1
     return 0
 end
-hook_mario_action(ACT_SYP_CHOP, act_syp_chop)
+hook_mario_action(ACT_SYP_CHOP, act_syp_chop, INT_KICK)
 
 local function act_syp_cannon(m)
     local e = gWarioStates[m.playerIndex]
@@ -1136,7 +1190,9 @@ local function wario_update(m)
     end
 
     -- roll
-    if m.action == ACT_BUTT_SLIDE and ((m.input & INPUT_Z_PRESSED ~= 0) or (m.prevAction == ACT_BUTT_SLIDE_AIR and m.input & INPUT_Z_DOWN ~= 0)) and m.forwardVel > 30 then
+    if (m.action == ACT_BUTT_SLIDE and m.forwardVel > 30 and ((m.input & INPUT_Z_DOWN ~= 0) or (m.prevAction == ACT_BUTT_SLIDE_AIR and m.input & INPUT_Z_DOWN ~= 0)))
+    or (m.action == ACT_CROUCH_SLIDE and m.actionTimer > 2 and m.input & INPUT_Z_PRESSED ~= 0)
+    and m.forwardVel > 30 then
         set_mario_action(m, ACT_WAR_ROLL, 0)
     end
 
@@ -1144,6 +1200,13 @@ local function wario_update(m)
     if (m.action == ACT_THROWING and m.actionTimer == 8) or (m.action == ACT_AIR_THROW and m.actionTimer == 5) then
         do_better_throw(m, m.usedObj)
     end
+
+    -- whomp; I'll figure this out later
+    --local oWhomp = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvSmallWhomp)
+    --if dist_between_object_and_point(oWhomp, m.pos.x, m.pos.y, m.pos.z) < 180 and m.action == ACT_WAR_SH_BASH then
+    --    oWhomp.oAction = 4
+    --    humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WARIO)
+    --end
 end
 
 local function wario_set_action(m)
@@ -1178,6 +1241,10 @@ local function wario_before_set_action(m, act)
         return ACT_WAR_CARRY
     elseif act == ACT_AIR_THROW then
         m.faceAngle.y = m.intendedYaw
+    elseif act == ACT_GROUND_POUND_LAND and m.input & INPUT_Z_DOWN ~= 0 and m.floor.normal.y < 0.94 and m.action == ACT_SUPER_GP then
+        m.slideVelX = (1 - m.floor.normal.y) * 100 * sins(m.faceAngle.y)
+        m.slideVelZ = (1 - m.floor.normal.y) * 100 * coss(m.faceAngle.y)
+        return ACT_BUTT_SLIDE
     end
 end
 
@@ -1187,15 +1254,17 @@ local function wario_interact(m, o, type)
 
     if (m.action == ACT_WAR_SH_BASH) and (type & damagableTypes) ~= 0 then
         dash_attacks(m, o, type)
-        if m.flags & MARIO_METAL_CAP == 0 and obj_has_behavior_id(o, id_bhvBreakableBox) == 0 then
-            humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WARIO)
+        if m.actionArg ~= 4 and m.flags & MARIO_METAL_CAP == 0 then
+            humble_bump(m, -40, 30, ACT_BASH_REBOUND, ARG_WARIO)
         end
         return false
     end
 
-    if (m.action == ACT_WAR_SH_BASH_JUMP) and (type & damagableTypes) ~= 0 and m.forwardVel > 10 then
+    if (m.action == ACT_WAR_SH_BASH_JUMP) and (type & damagableTypes) ~= 0 then
         dash_attacks(m, o, type)
-        humble_bump(m, -40, 15, ACT_WAR_SH_BASH_JUMP, ARG_WARIO)
+        if m.actionArg ~= 4 and m.flags & MARIO_METAL_CAP == 0 then
+            humble_bump(m, -40, 15, ACT_BASH_REBOUND, ARG_WARIO)
+        end
         return false
     end
 
@@ -1217,8 +1286,8 @@ local function wario_interact(m, o, type)
 end
 
 local function wario_attack(a, v)
-    if (a.action == ACT_WAR_SH_BASH or a.action == ACT_WAR_SH_BASH_JUMP) and a.forwardVel > 5 then
-        humble_bump(a, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WARIO)
+    if ((a.action == ACT_WAR_SH_BASH and a.actionArg ~= 4) or a.action == ACT_WAR_SH_BASH_JUMP) and a.forwardVel > 5 then
+        humble_bump(a, -40, 30, ACT_BASH_REBOUND, ARG_WARIO)
     end
 end
 
@@ -1284,7 +1353,7 @@ local function waluigi_update(m)
             if obj_has_behavior_id(m.heldObj, id_bhvBobomb) ~= 0 and e.bombsStashed < maxBombs then
                 return set_mario_action(m, ACT_BOMB_STASH, 0)
             end
-        elseif m.action == ACT_IDLE then
+        elseif m.action == ACT_IDLE or m.action == ACT_PANTING then
             if e.bombsStashed > 0 then
                 return set_mario_action(m, ACT_BOMB_STASH, 1)
             end
@@ -1352,14 +1421,14 @@ local function waluigi_interact(m, o, type)
     if (m.action == ACT_WAL_SH_BASH) and (type & damagableTypes) ~= 0 then
         dash_attacks(m, o, type)
         if m.flags & MARIO_METAL_CAP == 0 and obj_has_behavior_id(o, id_bhvBreakableBox) == 0 then
-            humble_bump(m, -40, 30, ACT_WAR_SH_BASH_JUMP, ARG_WALUIGI)
+            humble_bump(m, -40, 30, ACT_BASH_REBOUND, ARG_WALUIGI)
         end
         return false
     end
 
-    if (m.action == ACT_WAL_SH_BASH_JUMP) and (type & damagableTypes) ~= 0 and m.forwardVel > 10 then
+    if (m.action == ACT_WAL_SH_BASH_JUMP) and (type & damagableTypes) ~= 0 then
         dash_attacks(m, o, type)
-        humble_bump(m, -40, 15, ACT_WAR_SH_BASH_JUMP, ARG_WALUIGI)
+        humble_bump(m, -40, 15, ACT_BASH_REBOUND, ARG_WALUIGI)
         return false
     end
 
@@ -1509,7 +1578,6 @@ end
 local function on_death(m)
     local e = gWarioStates[m.playerIndex]
     e.wallet = 0
-    e.interestRate = math.random(1, 4)
 end
 hook_event(HOOK_ON_DEATH, on_death)
 
@@ -1517,7 +1585,6 @@ local function on_level_init()
     local m = gMarioStates[0]
     local e = gWarioStates[m.playerIndex]
 
-    e.interestRate = math.random(1, 4)
     e.availCoins = availCoinsMax
     mod_storage_save_integer("bank", e.bank)
 end
