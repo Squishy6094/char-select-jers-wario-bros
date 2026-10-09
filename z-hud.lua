@@ -158,11 +158,8 @@ local function do_coin_hud(m)
 
     djui_hud_set_font(FONT_RECOLOR_HUD)
 
-    --local x, y = hudDodge.find_open_hud_space(0, 0, 40, 32, 1, 0, e.wallet == 100 and 4 or 3)
-    --x = x + 4
-
-    local targetX = 63 + (#tostring(m.numLives) * 12) -- remove when squishy commits hud dodge changes
-    local targetY = 15
+    local targetX, targetY = hudDodge.find_open_hud_space(0, 0, 30, 16, 1, 0, (e.wallet == 100 or not powerScalingCheck) and 4 or 3)
+    targetX = targetX + 5
 
     if obj_get_first_with_behavior_id(id_bhvActSelector) then
         targetX = 38
