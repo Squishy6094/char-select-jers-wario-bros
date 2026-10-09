@@ -2,7 +2,7 @@
 -- Made by: Squishy6094
 
 -- Renders Debugging HUD
-local HUD_DODGE_HITBOXES_RENDER = true
+local HUD_DODGE_HITBOXES_RENDER = false
 -- Make Default HUD Elements spaced based on thier max value
 local HUD_DODGE_SAFE_DEFAULT = false
 
